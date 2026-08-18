@@ -1,0 +1,39 @@
+name: daily-papers
+
+on:
+  schedule:
+    # UTC 时间。01:00 UTC = 北京时间 09:00
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: files
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python check_config.py
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_OPEN_IDS: ${{ secrets.FEISHU_OPEN_IDS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - run: python main.py
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_OPEN_IDS: ${{ secrets.FEISHU_OPEN_IDS }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_MODEL: gpt-5.5
+          OPENAI_REASONING_EFFORT: low
+          ARXIV_CATEGORIES: "cs.HC,cs.AI,cs.CL,cs.CV,cs.GR"
+          MAX_RESULTS_PER_CATEGORY: "50"
+          KEYWORDS: "artificial intelligence,AI,large language model,LLM,generative AI,extended reality,XR,virtual reality,VR,augmented reality,AR,mixed reality,MR,design communication,design collaboration,co-design,communication,cross-cultural,cross culture,intercultural,culture,human-computer interaction,HCI"
+          TOP_N: "5"

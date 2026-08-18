@@ -1,0 +1,5 @@
+requests>=2.31
+
+# 阶段二回调服务才需要
+fastapi>=0.110
+uvicorn>=0.29

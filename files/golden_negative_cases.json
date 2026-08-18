@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "description": "Prompt regression cases for avoiding empty findings in human-readable paper summaries.",
+  "local_cases": [
+    {
+      "id": "attitude-social-image",
+      "category": "attitude_statement",
+      "paper": {
+        "title": "Safety vs. Social Image",
+        "abstract": "This paper co-designs protection mechanisms with people with disabilities for social virtual reality, showing how safety tools can create tension with self-presentation and social image."
+      },
+      "slots": {
+        "做了什么": "和残障用户共创社交 VR 防骚扰机制",
+        "发现了什么": "残障用户在社交 VR 里不只要安全，也会把社交形象放在很前面",
+        "方法类型": "共创设计",
+        "具体场景": "残障用户 · 社交 VR",
+        "样本规模": "",
+        "依据句": "prioritizing social image over safety"
+      },
+      "expected_branch": "action",
+      "expected_summary": "和残障用户共创社交 VR 防骚扰机制。",
+      "forbidden_substrings": ["不只要安全", "社交形象放在很前面"]
+    },
+    {
+      "id": "abstract-tail-after-causal-chain",
+      "category": "abstract_relation_tail",
+      "paper": {
+        "title": "Safety vs. Social Image",
+        "abstract": "Participants preferred avatars and profile cues that made disability identity visible for self-expression, but these cues also made them recognizable targets for ableist harassment."
+      },
+      "slots": {
+        "做了什么": "和残障用户共创社交 VR 防骚扰机制",
+        "发现了什么": "让残障身份可见有助于自我表达，但也会让用户更容易成为仇残骚扰目标，保护、披露和社交形象之间发生冲突",
+        "方法类型": "共创设计",
+        "具体场景": "残障用户 · 社交 VR",
+        "样本规模": "11人",
+        "依据句": "these cues also made them recognizable targets for ableist harassment"
+      },
+      "expected_branch": "finding",
+      "expected_summary": "让残障身份可见有助于自我表达，但也会让用户更容易成为仇残骚扰目标。",
+      "forbidden_substrings": ["保护、披露和社交形象之间发生冲突"]
+    },
+    {
+      "id": "abstract-relation-only",
+      "category": "abstract_relation_statement",
+      "paper": {
+        "title": "Safety vs. Social Image",
+        "abstract": "This paper co-designs protection mechanisms with people with disabilities for social virtual reality."
+      },
+      "slots": {
+        "做了什么": "和残障用户共创社交 VR 防骚扰机制",
+        "发现了什么": "保护、披露和社交形象之间发生冲突",
+        "方法类型": "共创设计",
+        "具体场景": "残障用户 · 社交 VR",
+        "样本规模": "",
+        "依据句": "tension between protection, disclosure, and social image"
+      },
+      "expected_branch": "action",
+      "expected_summary": "和残障用户共创社交 VR 防骚扰机制。",
+      "forbidden_substrings": ["之间发生冲突"]
+    },
+    {
+      "id": "dataset-performance-as-finding",
+      "category": "artifact_performance_finding",
+      "paper": {
+        "title": "MM-Conv",
+        "abstract": "The paper introduces a multimodal dataset and benchmark for context-aware grounding in 3D dialogue."
+      },
+      "slots": {
+        "做了什么": "发布一个用于动态 3D 环境中多轮对话指代表达定位的多模态数据集与基准",
+        "发现了什么": "上下文重写让 grounding 平均提升 11–22 个百分点",
+        "方法类型": "数据集、基准、方法",
+        "具体场景": "第一人称 VR 交互 · 动态 3D 环境",
+        "样本规模": "6.7小时；超过4,200个指代表达",
+        "依据句": "contextual rewriting approach improves grounding performance by 11-22 percentage points"
+      },
+      "expected_branch": "action",
+      "expected_summary": "发布一个用于动态 3D 环境中多轮对话指代表达定位的多模态数据集与基准。",
+      "forbidden_substrings": ["提升 11–22 个百分点"]
+    },
+    {
+      "id": "method-performance-as-finding",
+      "category": "artifact_performance_finding",
+      "paper": {
+        "title": "Learning an Efficient Multimodal Depth Completion Model",
+        "abstract": "The paper proposes a lightweight RGB-guided sparse ToF depth completion network."
+      },
+      "slots": {
+        "做了什么": "提出一个轻量高效的 RGB 引导稀疏 ToF 深度补全网络",
+        "发现了什么": "用轻量结构融合跨模态特征并逐步细化深度图，可以在低计算成本需求下超过部分 SOTA 方法",
+        "方法类型": "方法",
+        "具体场景": "移动设备 · 稀疏 ToF 深度补全",
+        "样本规模": "",
+        "依据句": "outperform some state-of-the-art methods with a lightweight architecture"
+      },
+      "expected_branch": "action",
+      "expected_summary": "提出一个轻量高效的 RGB 引导稀疏 ToF 深度补全网络。",
+      "forbidden_substrings": ["超过部分 SOTA"]
+    },
+    {
+      "id": "framework-keyword-list",
+      "category": "framework_keyword_list",
+      "paper": {
+        "title": "A Pluralistic Framework for Cross-Cultural AI Design",
+        "abstract": "This position paper proposes a framework for cross-cultural AI design."
+      },
+      "slots": {
+        "做了什么": "用多元主义、公民对话、换位思考、同理心、跨文化能力",
+        "发现了什么": "摘要没有给出明确结论",
+        "方法类型": "框架/立场",
+        "具体场景": "跨文化 AI 设计",
+        "样本规模": "",
+        "依据句": "proposes a framework for cross-cultural AI design"
+      },
+      "expected_branch": "fallback",
+      "expected_summary": "提出一个围绕「A Pluralistic Framework for Cross-Cultural AI Design」的框架，说明它要解决的问题和核心主张。",
+      "forbidden_substrings": ["多元主义、公民对话、换位思考"]
+    }
+  ],
+  "humanize_cases": [
+    {
+      "id": "humanize-keeps-entities-and-length",
+      "category": "humanize_positive",
+      "precise": "MM-Conv 的上下文重写让 grounding 平均提升 11-22 个百分点。",
+      "candidate": "MM-Conv 先把上下文说清，再去找目标，grounding 多对 11-22 个点。",
+      "expected_safe": true
+    },
+    {
+      "id": "humanize-no-new-clauses",
+      "category": "humanize_extra_clause",
+      "precise": "MM-Conv 的上下文重写让 grounding 平均提升 11-22 个百分点。",
+      "candidate": "MM-Conv 先把上下文说清，再去找目标，grounding 多对 11-22 个点，并且还能处理动态3D场景，还减少歧义。",
+      "expected_safe": false
+    },
+    {
+      "id": "humanize-preserves-key-entities",
+      "category": "humanize_missing_entity",
+      "precise": "MM-Conv 的上下文重写让 grounding 平均提升 11-22 个百分点。",
+      "candidate": "先把上下文说清，再去找目标，grounding 多对十几个点。",
+      "expected_safe": false
+    },
+    {
+      "id": "humanize-rejects-truncated-english",
+      "category": "humanize_truncated_sentence",
+      "precise": "用 FAST VR assembly 数据集评测 VR 装配任务。",
+      "candidate": "用FAST VR assemb。",
+      "expected_safe": false
+    },
+    {
+      "id": "humanize-rejects-truncated-chinese",
+      "category": "humanize_truncated_sentence",
+      "precise": "用户最终放弃隐私更差的选项。",
+      "candidate": "用户最终放弃隐私更差的选。",
+      "expected_safe": false
+    }
+  ],
+  "api_cases": [
+    {
+      "id": "clever-job-simulator",
+      "category": "dataset",
+      "arxiv_id": "2608.13715",
+      "title": "The Capturing and Logging Ecological Virtual Experiences and Reality (CLEVER) - Job Simulator Dataset",
+      "source_url": "https://arxiv.org/abs/2608.13715",
+      "expected_branch": "action"
+    },
+    {
+      "id": "mm-conv",
+      "category": "dataset",
+      "arxiv_id": "2605.21796",
+      "title": "MM-Conv: A Multimodal Dataset and Benchmark for Context-Aware Grounding in 3D Dialogue",
+      "source_url": "https://arxiv.org/abs/2605.21796",
+      "expected_branch": "action"
+    },
+    {
+      "id": "core4d",
+      "category": "dataset",
+      "arxiv_id": "2406.19353",
+      "title": "CORE4D: A 4D Human-Object-Human Interaction Dataset for Collaborative Object REarrangement",
+      "source_url": "https://arxiv.org/abs/2406.19353",
+      "expected_branch": "action"
+    },
+    {
+      "id": "objchangevr",
+      "category": "dataset",
+      "arxiv_id": "2603.06648",
+      "title": "ObjChangeVR: Object State Change Reasoning from Continuous Egocentric Views in VR Environments",
+      "source_url": "https://arxiv.org/abs/2603.06648",
+      "expected_branch": "action"
+    },
+    {
+      "id": "discern-xr",
+      "category": "dataset",
+      "arxiv_id": "2411.05184",
+      "title": "Discern-XR: An Online Classifier for Metaverse Network Traffic",
+      "source_url": "https://arxiv.org/abs/2411.05184",
+      "expected_branch": "action"
+    },
+    {
+      "id": "dense-metric-depth-completion",
+      "category": "method_system",
+      "arxiv_id": "2608.04737",
+      "title": "Dense Metric Depth Completion from Sparse Direct Time-of-Flight Sensors",
+      "source_url": "https://arxiv.org/abs/2608.04737",
+      "expected_branch": "action"
+    },
+    {
+      "id": "svdc",
+      "category": "method_system",
+      "arxiv_id": "2503.01257",
+      "title": "SVDC: Consistent Direct Time-of-Flight Video Depth Completion with Frequency Selective Fusion",
+      "source_url": "https://arxiv.org/abs/2503.01257",
+      "expected_branch": "action"
+    },
+    {
+      "id": "sparse-noisy-lidar-completion",
+      "category": "method_system",
+      "arxiv_id": "1902.05356",
+      "title": "Sparse and noisy LiDAR completion with RGB guidance and uncertainty",
+      "source_url": "https://arxiv.org/abs/1902.05356",
+      "expected_branch": "action"
+    },
+    {
+      "id": "dfinenet",
+      "category": "method_system",
+      "arxiv_id": "1903.06397",
+      "title": "DFineNet: Ego-Motion Estimation and Depth Refinement from Sparse, Noisy Depth Input with RGB Guidance",
+      "source_url": "https://arxiv.org/abs/1903.06397",
+      "expected_branch": "action"
+    },
+    {
+      "id": "efficient-multimodal-depth-completion",
+      "category": "method_system",
+      "arxiv_id": "2208.10771",
+      "title": "Learning an Efficient Multimodal Depth Completion Model",
+      "source_url": "https://arxiv.org/abs/2208.10771",
+      "expected_branch": "action"
+    }
+  ]
+}
