@@ -2,8 +2,9 @@ name: daily-papers
 
 on:
   schedule:
-    # UTC 时间。01:00 UTC = 北京时间 09:00
-    - cron: "0 1 * * *"
+    # 北京时间每天 09:00
+    - cron: "0 9 * * *"
+      timezone: "Asia/Shanghai"
   workflow_dispatch:
 
 jobs:
@@ -33,7 +34,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_MODEL: gpt-5.5
           OPENAI_REASONING_EFFORT: low
-          ARXIV_CATEGORIES: "cs.HC,cs.AI,cs.CL,cs.CV,cs.GR"
+          ARXIV_CATEGORIES: "cs.HC,cs.AI,cs.LG,stat.ML,cs.CL,cs.CV,cs.GR,cs.RO"
           MAX_RESULTS_PER_CATEGORY: "50"
-          KEYWORDS: "artificial intelligence,AI,large language model,LLM,generative AI,extended reality,XR,virtual reality,VR,augmented reality,AR,mixed reality,MR,design communication,design collaboration,co-design,communication,cross-cultural,cross culture,intercultural,culture,human-computer interaction,HCI"
+          MIN_RELEVANCE_SCORE: "4"
+          KEYWORDS: "artificial intelligence,AI,machine learning,ML,deep learning,neural network,foundation model,large language model,LLM,generative AI,multimodal,vision-language,AI agent,autonomous agent,human-AI interaction,human-centered AI,explainable AI,XAI,AI-assisted,AI-mediated,extended reality,XR,virtual reality,VR,augmented reality,AR,mixed reality,MR,spatial computing,immersive,embodied interaction,head-mounted display,HMD,hand tracking,human-computer interaction,HCI,user study,interaction design,user experience,UX,usability,mixed-initiative,creativity support,design tool,benchmark,dataset,evaluation"
           TOP_N: "5"
