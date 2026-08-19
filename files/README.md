@@ -4,7 +4,7 @@
 
 > 这篇论文是在比较不同 VR/AR 设备追手指准不准，尤其看点选和描线这类细操作。
 
-现在先做单用户 MVP：arXiv 取数，关键词粗筛，模型生成一句话，飞书自建应用单聊推送。
+现在先做单用户 MVP：arXiv 取数，关键词粗筛，模型生成一句话，飞书自建应用单聊或群机器人 webhook 推送。
 
 ## 你先做这三步
 
@@ -26,8 +26,12 @@ Copy-Item .env.example .env
 FEISHU_APP_ID=你的飞书自建应用 App ID
 FEISHU_APP_SECRET=你的飞书自建应用 App Secret
 FEISHU_OPEN_IDS=你的飞书 open_id，多个用英文逗号分隔
+FEISHU_WEBHOOKS=飞书群机器人 webhook，多个用英文逗号分隔
+FEISHU_WEBHOOK_SECRET=飞书群机器人签名密钥；未开启签名可留空
 OPENAI_API_KEY=你的 OpenAI API key
 ```
+
+`FEISHU_OPEN_IDS` 和 `FEISHU_WEBHOOKS` 可以并存：前者走自建应用单聊，需要 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`；后者走群机器人 webhook，不需要 token。如果群机器人开启了签名校验，再填 `FEISHU_WEBHOOK_SECRET`。
 
 如果先不用 OpenAI，也可以改成 Anthropic：
 
@@ -76,6 +80,8 @@ workflow 已经放在项目根目录的 `.github/workflows/daily.yml`。推到 G
 FEISHU_APP_ID
 FEISHU_APP_SECRET
 FEISHU_OPEN_IDS
+FEISHU_WEBHOOKS
+FEISHU_WEBHOOK_SECRET
 OPENAI_API_KEY
 ```
 

@@ -1,15 +1,24 @@
 """
 飞书发送层。
 
-现在使用飞书企业自建应用单聊：
+支持两条发送通道，可同时使用：
 
   FEISHU_APP_ID / FEISHU_APP_SECRET
       换 tenant_access_token，同一次运行内缓存复用。
 
   FEISHU_OPEN_IDS
       逗号分隔的 open_id 列表，逐个发送交互式卡片。
+
+  FEISHU_WEBHOOKS
+      逗号分隔的群机器人 webhook 地址，逐个发送同一张交互式卡片。
+
+  FEISHU_WEBHOOK_SECRET
+      群机器人开启签名校验时填写；不启用签名时留空。
 """
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -72,33 +81,99 @@ def send_via_app(card: Dict[str, Any], open_id: str) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------
+# Webhook 群机器人
+# --------------------------------------------------------------------------
+
+def send_via_webhook(
+    card: Dict[str, Any],
+    webhook: str,
+    secret: str = "",
+) -> Dict[str, Any]:
+    """通过飞书群机器人 webhook 发送；secret 只用于可选签名校验。"""
+    body: Dict[str, Any] = {
+        "msg_type": "interactive",
+        "card": card,
+    }
+    if secret:
+        body.update(build_webhook_signature(secret))
+
+    return post_json(
+        webhook,
+        body=body,
+        timeout=10,
+    )
+
+
+def build_webhook_signature(secret: str) -> Dict[str, str]:
+    timestamp = str(int(time.time()))
+    string_to_sign = f"{timestamp}\n{secret}"
+    sign = base64.b64encode(
+        hmac.new(
+            string_to_sign.encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).digest()
+    ).decode("utf-8")
+    return {"timestamp": timestamp, "sign": sign}
+
+
+# --------------------------------------------------------------------------
 # 统一入口
 # --------------------------------------------------------------------------
 
 def send_card_to_open_ids(
     card: Dict[str, Any],
     open_ids: Optional[List[str]] = None,
+    webhooks: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
-    """逐个 open_id 发送；单个失败不中断其余，返回每个接收人的结果。"""
-    targets = open_ids or get_open_ids()
+    """逐个发送到 open_id 和 webhook；单个失败不中断其余。"""
+    app_targets = open_ids if open_ids is not None else get_optional_open_ids()
+    webhook_targets = webhooks if webhooks is not None else get_webhooks()
+    webhook_secret = os.environ.get("FEISHU_WEBHOOK_SECRET", "").strip()
+    if not app_targets and not webhook_targets:
+        raise RuntimeError("缺少飞书接收配置：请设置 FEISHU_OPEN_IDS 或 FEISHU_WEBHOOKS")
+
     results: List[Dict[str, Any]] = []
 
-    for open_id in targets:
+    for open_id in app_targets:
         try:
             data = send_via_app(card, open_id)
-            code = data.get("code", -1)
-            msg = data.get("msg", "")
-            ok = code == 0
+            code, msg, ok = _feishu_result_status(data)
         except Exception as exc:
             data = {}
             code = -1
             msg = str(exc)
             ok = False
 
-        print(f"飞书发送 open_id={open_id} code={code} msg={msg}")
+        print(f"飞书发送 app open_id={open_id} code={code} msg={msg}")
         results.append(
             {
+                "channel": "app",
+                "target": open_id,
                 "open_id": open_id,
+                "ok": ok,
+                "code": code,
+                "msg": msg,
+                "data": data,
+            }
+        )
+
+    for idx, webhook in enumerate(webhook_targets, start=1):
+        target = f"webhook#{idx}"
+        try:
+            data = send_via_webhook(card, webhook, webhook_secret)
+            code, msg, ok = _feishu_result_status(data)
+        except Exception as exc:
+            data = {}
+            code = -1
+            msg = str(exc)
+            ok = False
+
+        print(f"飞书发送 {target} code={code} msg={msg}")
+        results.append(
+            {
+                "channel": "webhook",
+                "target": target,
+                "webhook": target,
                 "ok": ok,
                 "code": code,
                 "msg": msg,
@@ -117,15 +192,35 @@ def send_card(card: Dict[str, Any], open_id: Optional[str] = None) -> Dict[str, 
 
 
 def get_open_ids() -> List[str]:
+    open_ids = get_optional_open_ids()
+    if not open_ids:
+        raise RuntimeError("缺少 FEISHU_OPEN_IDS；请填入逗号分隔的飞书 open_id 列表")
+    return open_ids
+
+
+def get_optional_open_ids() -> List[str]:
     raw = os.environ.get("FEISHU_OPEN_IDS") or os.environ.get("OPEN_IDS", "")
-    open_ids = [
+    return parse_env_list(raw)
+
+
+def get_webhooks() -> List[str]:
+    return parse_env_list(os.environ.get("FEISHU_WEBHOOKS", ""))
+
+
+def parse_env_list(raw: str) -> List[str]:
+    return [
         item.strip()
         for item in raw.replace("\n", ",").split(",")
         if item.strip()
     ]
-    if not open_ids:
-        raise RuntimeError("缺少 FEISHU_OPEN_IDS；请填入逗号分隔的飞书 open_id 列表")
-    return open_ids
+
+
+def _feishu_result_status(data: Dict[str, Any]) -> tuple:
+    code = data.get("code")
+    if code is None:
+        code = data.get("StatusCode", -1)
+    msg = data.get("msg") or data.get("StatusMessage") or ""
+    return code, msg, str(code) == "0"
 
 
 def require_env(key: str) -> str:

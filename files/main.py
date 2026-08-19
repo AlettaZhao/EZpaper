@@ -1440,7 +1440,7 @@ def main() -> None:
     results = send_card_to_open_ids(card)
     failed = [item for item in results if not item["ok"]]
     if failed:
-        raise RuntimeError(f"飞书发送失败：{len(failed)}/{len(results)} 个接收人失败")
+        raise RuntimeError(f"飞书发送失败：{len(failed)}/{len(results)} 个目标失败")
 
     print(f"已发送 {len(selected)} 篇")
 
