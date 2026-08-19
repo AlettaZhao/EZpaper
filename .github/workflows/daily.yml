@@ -18,6 +18,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Restore sent paper history
+        uses: actions/cache@v4
+        with:
+          path: files/data/sent_papers.json
+          key: sent-papers-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            sent-papers-${{ runner.os }}-
       - run: python check_config.py
         env:
           FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
@@ -41,5 +48,8 @@ jobs:
           ARXIV_CATEGORIES: "cs.HC,cs.AI,cs.LG,stat.ML,cs.CL,cs.CV,cs.GR,cs.RO"
           MAX_RESULTS_PER_CATEGORY: "50"
           MIN_RELEVANCE_SCORE: "4"
-          KEYWORDS: "artificial intelligence,AI,machine learning,ML,deep learning,neural network,foundation model,large language model,LLM,generative AI,multimodal,vision-language,AI agent,autonomous agent,human-AI interaction,human-centered AI,explainable AI,XAI,AI-assisted,AI-mediated,extended reality,XR,virtual reality,VR,augmented reality,AR,mixed reality,MR,spatial computing,immersive,embodied interaction,head-mounted display,HMD,hand tracking,human-computer interaction,HCI,user study,interaction design,user experience,UX,usability,mixed-initiative,creativity support,design tool,benchmark,dataset,evaluation"
+          REQUIRE_CORE_RELEVANCE: "1"
+          MAX_PAPER_AGE_DAYS: "14"
+          SENT_HISTORY_RETENTION_DAYS: "365"
+          KEYWORDS: "artificial intelligence,AI,machine learning,ML,deep learning,neural network,foundation model,large language model,LLM,generative AI,multimodal,vision-language,AI agent,autonomous agent,human-AI interaction,human-centered AI,explainable AI,XAI,AI-assisted,AI-mediated,extended reality,XR,virtual reality,VR,augmented reality,AR,mixed reality,spatial computing,immersive,embodied interaction,head-mounted display,HMD,hand tracking,human-computer interaction,HCI,user study,interaction design,user experience,UX,usability,mixed-initiative,creativity support,design tool,benchmark,dataset,evaluation"
           TOP_N: "5"

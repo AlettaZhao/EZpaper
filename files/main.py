@@ -12,7 +12,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from env import load_env_file
 from feishu import build_daily_card, send_card_to_open_ids
@@ -59,7 +59,6 @@ DEFAULT_KEYWORDS = [
     "augmented reality",
     "AR",
     "mixed reality",
-    "MR",
     "spatial computing",
     "immersive",
     "embodied interaction",
@@ -95,6 +94,25 @@ ARXIV_REQUEST_DELAY_SECONDS = float(os.environ.get("ARXIV_REQUEST_DELAY_SECONDS"
 SUMMARY_DISPLAY_MAX_CHARS = int(os.environ.get("SUMMARY_DISPLAY_MAX_CHARS", "48"))
 PRECISE_RETRY_ATTEMPTS = int(os.environ.get("PRECISE_RETRY_ATTEMPTS", "2"))
 HUMANIZE_RETRY_ATTEMPTS = int(os.environ.get("HUMANIZE_RETRY_ATTEMPTS", "2"))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SENT_PAPERS_PATH = os.environ.get(
+    "SENT_PAPERS_PATH",
+    os.path.join(SCRIPT_DIR, "data", "sent_papers.json"),
+)
+SENT_HISTORY_RETENTION_DAYS = int(os.environ.get("SENT_HISTORY_RETENTION_DAYS", "365"))
+MAX_PAPER_AGE_DAYS = int(os.environ.get("MAX_PAPER_AGE_DAYS", "14"))
+REQUIRE_CORE_RELEVANCE = os.environ.get("REQUIRE_CORE_RELEVANCE", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
+ALLOW_REPEAT_PAPERS = os.environ.get("ALLOW_REPEAT_PAPERS", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 KEYWORD_WEIGHTS = {
     "artificial intelligence": 2,
@@ -124,7 +142,6 @@ KEYWORD_WEIGHTS = {
     "augmented reality": 5,
     "AR": 5,
     "mixed reality": 5,
-    "MR": 5,
     "spatial computing": 5,
     "immersive": 3,
     "embodied interaction": 5,
@@ -162,6 +179,126 @@ TOPIC_TAG_RULES = [
     ("HCI", ["human-computer interaction", "hci", "user study", "interaction design", "user experience", "usability"]),
     ("设计工具", ["design tool", "creativity support", "co-design", "designer"]),
     ("数据集", ["dataset", "benchmark", "corpus"]),
+]
+
+CORE_RELEVANCE_RULES = [
+    (
+        "HCI/用户研究",
+        [
+            "human-computer interaction",
+            "hci",
+            "user study",
+            "participant study",
+            "human subjects",
+            "field study",
+            "interview",
+            "survey",
+            "usability",
+            "user experience",
+            "ux",
+        ],
+    ),
+    (
+        "Human-AI",
+        [
+            "human-ai interaction",
+            "human-centered ai",
+            "ai-assisted",
+            "ai-mediated",
+            "mixed-initiative",
+        ],
+    ),
+    (
+        "设计/共创",
+        [
+            "creativity support",
+            "design tool",
+            "co-design",
+            "participatory design",
+            "designer",
+        ],
+    ),
+    (
+        "XR/空间交互",
+        [
+            "extended reality",
+            "xr",
+            "virtual reality",
+            "vr",
+            "augmented reality",
+            "ar",
+            "mixed reality",
+            "spatial computing",
+            "immersive",
+            "embodied interaction",
+            "head-mounted display",
+            "hmd",
+            "hand tracking",
+            "gesture",
+        ],
+    ),
+    (
+        "可访问性",
+        [
+            "accessibility",
+            "disabilities",
+            "disabled",
+            "low vision",
+            "assistive",
+            "ableist",
+        ],
+    ),
+    (
+        "HRI/机器人交互",
+        [
+            "human-robot interaction",
+            "hri",
+            "social robot",
+            "robot interaction",
+        ],
+    ),
+]
+
+AI_TERMS_FOR_DESIGN_BRIDGE = [
+    "artificial intelligence",
+    "ai",
+    "machine learning",
+    "ml",
+    "large language model",
+    "llm",
+    "generative ai",
+    "foundation model",
+    "ai agent",
+    "autonomous agent",
+]
+
+DESIGN_BRIDGE_TERMS = [
+    "designer",
+    "design process",
+    "design practice",
+    "design collaboration",
+    "design communication",
+    "creativity",
+    "creative",
+    "llm-assisted writing",
+    "ai-assisted writing",
+    "writing tool",
+    "collaboration",
+    "communication",
+    "human",
+    "humans",
+    "user",
+    "users",
+    "student",
+    "students",
+    "learner",
+    "learners",
+    "interaction",
+    "interactive",
+    "interface",
+    "sensemaking",
+    "steering",
+    "workflow",
 ]
 
 PAPER_TYPE_RULES = [
@@ -228,7 +365,10 @@ def fetch_recent(category: str, max_results: int = 100) -> List[Dict[str, Any]]:
         timeout=30,
     )
 
-    ns = {"a": "http://www.w3.org/2005/Atom"}
+    ns = {
+        "a": "http://www.w3.org/2005/Atom",
+        "arxiv": "http://arxiv.org/schemas/atom",
+    }
     root = ET.fromstring(body)
 
     papers = []
@@ -236,6 +376,7 @@ def fetch_recent(category: str, max_results: int = 100) -> List[Dict[str, Any]]:
         abs_url = entry.find("a:id", ns).text.strip()
         paper_id = abs_url.rsplit("/", 1)[-1]
         published = entry.find("a:published", ns)
+        primary_category = entry.find("arxiv:primary_category", ns)
         papers.append(
             {
                 "id": paper_id,
@@ -248,6 +389,7 @@ def fetch_recent(category: str, max_results: int = 100) -> List[Dict[str, Any]]:
                 ],
                 "published": published.text[:10] if published is not None else "",
                 "source": "arXiv",
+                "primary_category": primary_category.attrib.get("term", "") if primary_category is not None else "",
                 "categories": [
                     c.attrib.get("term", "")
                     for c in entry.findall("a:category", ns)
@@ -261,6 +403,212 @@ def canonical_arxiv_url(paper_id: str, fallback_url: str) -> str:
     if paper_id:
         return f"https://arxiv.org/abs/{paper_id}"
     return fallback_url.replace("http://", "https://", 1)
+
+
+def paper_history_key(paper_id: str) -> str:
+    """Use the arXiv base id so v1/v2 updates do not reappear as new papers."""
+    value = str(paper_id or "").strip().rsplit("/", 1)[-1]
+    return re.sub(r"v\d+$", "", value, flags=re.IGNORECASE)
+
+
+def today_date() -> datetime.date:
+    return datetime.date.today()
+
+
+def parse_date(value: str) -> Optional[datetime.date]:
+    if not value:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def empty_sent_history() -> Dict[str, Any]:
+    return {"version": 1, "updated": "", "sent": {}}
+
+
+def load_sent_history(path: str = SENT_PAPERS_PATH) -> Dict[str, Any]:
+    if not path or not os.path.exists(path):
+        return empty_sent_history()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[warn] 已推送历史读取失败，将临时忽略历史：{exc}")
+        return empty_sent_history()
+    return normalize_sent_history(data)
+
+
+def normalize_sent_history(data: Any) -> Dict[str, Any]:
+    history = empty_sent_history()
+    if isinstance(data, list):
+        for item in data:
+            key = paper_history_key(str(item))
+            if key:
+                history["sent"][key] = {"sent_on": "", "last_version": str(item)}
+        return history
+    if not isinstance(data, dict):
+        return history
+
+    sent = data.get("sent", {})
+    if isinstance(sent, list):
+        sent = {paper_history_key(str(item)): {"sent_on": "", "last_version": str(item)} for item in sent}
+    if not isinstance(sent, dict):
+        sent = {}
+
+    history["version"] = int(data.get("version", 1) or 1)
+    history["updated"] = str(data.get("updated", ""))
+    history["sent"] = {
+        paper_history_key(key): value if isinstance(value, dict) else {"sent_on": str(value)}
+        for key, value in sent.items()
+        if paper_history_key(key)
+    }
+    return history
+
+
+def save_sent_history(history: Dict[str, Any], path: str = SENT_PAPERS_PATH) -> None:
+    if not path:
+        return
+    directory = os.path.dirname(os.path.abspath(path))
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2, sort_keys=True)
+        f.write("\n")
+
+
+def prune_sent_history(history: Dict[str, Any], today: Optional[datetime.date] = None) -> int:
+    if SENT_HISTORY_RETENTION_DAYS <= 0:
+        return 0
+    today = today or today_date()
+    cutoff = today - datetime.timedelta(days=SENT_HISTORY_RETENTION_DAYS)
+    sent = history.setdefault("sent", {})
+    removed = 0
+    for key, item in list(sent.items()):
+        sent_on = parse_date(str(item.get("sent_on", ""))) if isinstance(item, dict) else None
+        if sent_on and sent_on < cutoff:
+            sent.pop(key, None)
+            removed += 1
+    return removed
+
+
+def sent_paper_keys(history: Dict[str, Any]) -> set:
+    return set((history.get("sent") or {}).keys())
+
+
+def should_use_sent_history() -> bool:
+    return not ALLOW_REPEAT_PAPERS and not os.environ.get("USE_SAMPLE_PAPERS")
+
+
+def should_record_sent_history() -> bool:
+    return not os.environ.get("DRY_RUN") and not os.environ.get("USE_SAMPLE_PAPERS")
+
+
+def mark_papers_sent(
+    history: Dict[str, Any],
+    papers: List[Dict[str, Any]],
+    today: Optional[datetime.date] = None,
+) -> int:
+    today = today or today_date()
+    today_text = today.isoformat()
+    sent = history.setdefault("sent", {})
+    changed = 0
+    for paper in papers:
+        key = paper_history_key(paper.get("id", ""))
+        if not key:
+            continue
+        current = sent.get(key, {})
+        next_item = {
+            "sent_on": today_text,
+            "last_version": paper.get("id", ""),
+            "title": paper.get("title", ""),
+            "url": paper.get("url", ""),
+        }
+        if current != next_item:
+            sent[key] = next_item
+            changed += 1
+    history["updated"] = today_text
+    return changed
+
+
+def dedupe_papers(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = set()
+    deduped = []
+    for paper in papers:
+        key = paper_history_key(paper.get("id", "")) or paper.get("url", "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        paper["_history_key"] = key
+        deduped.append(paper)
+    return deduped
+
+
+def is_recent_enough(paper: Dict[str, Any], today: Optional[datetime.date] = None) -> bool:
+    if MAX_PAPER_AGE_DAYS <= 0:
+        return True
+    published = parse_date(paper.get("published", ""))
+    if not published:
+        return True
+    today = today or today_date()
+    return (today - published).days <= MAX_PAPER_AGE_DAYS
+
+
+def filter_unsent_papers(
+    papers: List[Dict[str, Any]],
+    history: Dict[str, Any],
+) -> Tuple[List[Dict[str, Any]], int]:
+    if not should_use_sent_history():
+        return papers, 0
+    sent = sent_paper_keys(history)
+    out = []
+    skipped = 0
+    for paper in papers:
+        key = paper_history_key(paper.get("id", "")) or paper.get("_history_key", "")
+        if key in sent:
+            skipped += 1
+            continue
+        out.append(paper)
+    return out, skipped
+
+
+def select_daily_papers(
+    all_papers: List[Dict[str, Any]],
+    history: Optional[Dict[str, Any]] = None,
+    today: Optional[datetime.date] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    today = today or today_date()
+    history = history or empty_sent_history()
+    stats = {
+        "fetched": len(all_papers),
+        "duplicates": 0,
+        "old": 0,
+        "already_sent": 0,
+        "below_score": 0,
+        "weak_relevance": 0,
+        "candidates": 0,
+        "selected": 0,
+    }
+
+    deduped = dedupe_papers(all_papers)
+    stats["duplicates"] = len(all_papers) - len(deduped)
+
+    fresh = []
+    for paper in deduped:
+        if is_recent_enough(paper, today):
+            fresh.append(paper)
+        else:
+            stats["old"] += 1
+
+    unsent, skipped = filter_unsent_papers(fresh, history)
+    stats["already_sent"] = skipped
+
+    candidates = coarse_filter(unsent, stats)
+    stats["candidates"] = len(candidates)
+    selected = rank(candidates)
+    stats["selected"] = len(selected)
+    return selected, stats
 
 
 # --------------------------------------------------------------------------
@@ -292,6 +640,33 @@ def any_term_present(terms: List[str], blob: str) -> bool:
     return any(keyword_present(term, blob) for term in terms)
 
 
+def core_relevance_labels(paper: Dict[str, Any]) -> List[str]:
+    blob = paper_blob(paper)
+    categories = set(paper.get("categories", []))
+    primary_category = paper.get("primary_category", "")
+    if primary_category:
+        categories.add(primary_category)
+
+    labels = []
+    if "cs.HC" in categories:
+        labels.append("HCI/用户研究")
+
+    for label, terms in CORE_RELEVANCE_RULES:
+        if any_term_present(terms, blob):
+            labels.append(label)
+
+    if any_term_present(AI_TERMS_FOR_DESIGN_BRIDGE, blob) and any_term_present(DESIGN_BRIDGE_TERMS, blob):
+        labels.append("AI+设计/协作")
+
+    return unique_parts(labels)
+
+
+def annotate_relevance(paper: Dict[str, Any]) -> List[str]:
+    labels = core_relevance_labels(paper)
+    paper["_relevance_labels"] = labels
+    return labels
+
+
 def infer_topic_tags(paper: Dict[str, Any], max_tags: int = 3) -> List[str]:
     blob = paper_blob(paper)
     tags = [label for label, terms in TOPIC_TAG_RULES if any_term_present(terms, blob)]
@@ -317,6 +692,9 @@ def source_meta(paper: Dict[str, Any]) -> str:
 
 
 def recommendation_reason(paper: Dict[str, Any]) -> str:
+    labels = paper.get("_relevance_labels") or annotate_relevance(paper)
+    if labels:
+        return "核心匹配：" + " / ".join(labels[:3])
     tags = infer_topic_tags(paper)
     if tags:
         return "匹配：" + " / ".join(tags)
@@ -345,6 +723,11 @@ def context_line(paper: Dict[str, Any]) -> str:
     parts = [p for p in unique_parts(parts) if number_claim_is_supported(p, paper)]
     parts = drop_redundant_generic_context(parts)
     return " · ".join(parts[:3])
+
+
+def paper_detail_line(paper: Dict[str, Any]) -> str:
+    parts = [source_meta(paper), recommendation_reason(paper)]
+    return " · ".join(part for part in parts if part)
 
 
 def number_claim_is_supported(text: str, paper: Dict[str, Any]) -> bool:
@@ -504,7 +887,7 @@ def infer_sample_scale(blob: str) -> str:
     return ""
 
 
-def coarse_filter(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def coarse_filter(papers: List[Dict[str, Any]], stats: Optional[Dict[str, int]] = None) -> List[Dict[str, Any]]:
     """关键词粗筛。便宜、可解释，先用这个占位。"""
     keywords = get_keywords()
     if not keywords:
@@ -516,8 +899,16 @@ def coarse_filter(papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         p["_hits"] = len(hits)
         p["_matched_keywords"] = hits
         p["_score"] = sum(KEYWORD_WEIGHTS.get(k, 1) for k in hits)
-        if p["_score"] >= MIN_RELEVANCE_SCORE:
-            out.append(p)
+        labels = annotate_relevance(p)
+        if p["_score"] < MIN_RELEVANCE_SCORE:
+            if stats is not None:
+                stats["below_score"] = stats.get("below_score", 0) + 1
+            continue
+        if REQUIRE_CORE_RELEVANCE and not labels:
+            if stats is not None:
+                stats["weak_relevance"] = stats.get("weak_relevance", 0) + 1
+            continue
+        out.append(p)
     return sorted(out, key=lambda x: (-x["_score"], -x["_hits"]))
 
 
@@ -920,6 +1311,29 @@ def shorten_prompt_input(candidate: str, precise: str) -> str:
     )
 
 
+def print_selection_report(stats: Dict[str, int], selected: List[Dict[str, Any]]) -> None:
+    print(
+        "[select] "
+        f"抓取 {stats.get('fetched', 0)} 篇；"
+        f"同篇去重 {stats.get('duplicates', 0)} 篇；"
+        f"过旧跳过 {stats.get('old', 0)} 篇；"
+        f"历史跳过 {stats.get('already_sent', 0)} 篇；"
+        f"历史清理 {stats.get('history_pruned', 0)} 篇；"
+        f"分数不足 {stats.get('below_score', 0)} 篇；"
+        f"核心相关不足 {stats.get('weak_relevance', 0)} 篇；"
+        f"候选 {stats.get('candidates', 0)} 篇；"
+        f"最终 {stats.get('selected', 0)} 篇。"
+    )
+    if not selected:
+        return
+    print("[select] 本次入选：")
+    for idx, paper in enumerate(selected, start=1):
+        print(
+            f"[select] {idx}. {paper.get('id', '')} | "
+            f"{paper.get('title', '')} | {recommendation_reason(paper)}"
+        )
+
+
 def call_openai_text(system_prompt: str, user_prompt: str, max_tokens: int, reasoning_effort: str, model: str) -> str:
     data = post_json(
         "https://api.openai.com/v1/responses",
@@ -1087,6 +1501,8 @@ def normalize_summary(text: str, paper: Dict[str, Any]) -> str:
     if parts and parts[0].strip():
         text = parts[0].strip()
     text = strip_abstract_relation_tail(text)
+    if text and text[-1] not in "。！？!?" and not looks_truncated(text):
+        text += "。"
     return text
 
 
@@ -1415,20 +1831,24 @@ def main() -> None:
                 time.sleep(ARXIV_REQUEST_DELAY_SECONDS)
             all_papers.extend(fetch_recent(cat.strip(), max_results=MAX_RESULTS_PER_CATEGORY))
 
-    seen, deduped = set(), []
-    for p in all_papers:
-        if p["id"] not in seen:
-            seen.add(p["id"])
-            deduped.append(p)
+    history = load_sent_history()
+    pruned = prune_sent_history(history)
+    selected, stats = select_daily_papers(all_papers, history)
+    stats["history_pruned"] = pruned
 
-    selected = rank(coarse_filter(deduped))
+    if os.environ.get("DRY_RUN") or os.environ.get("VERBOSE_SELECTION"):
+        print_selection_report(stats, selected)
+
     if not selected:
-        print("今天没有命中的论文")
+        print("今天没有命中的新论文")
+        if pruned and should_record_sent_history():
+            save_sent_history(history)
         return
 
     for p in selected:
         p["plain"] = summarize(p)
         p["context_line"] = context_line(p)
+        p["detail_line"] = paper_detail_line(p)
 
     card = build_daily_card(
         selected,
@@ -1443,6 +1863,12 @@ def main() -> None:
     failed = [item for item in results if not item["ok"]]
     if failed:
         raise RuntimeError(f"飞书发送失败：{len(failed)}/{len(results)} 个目标失败")
+
+    if should_record_sent_history():
+        changed = mark_papers_sent(history, selected)
+        if changed or pruned:
+            save_sent_history(history)
+        print(f"已记录 {changed} 篇到推送历史")
 
     print(f"已发送 {len(selected)} 篇")
 

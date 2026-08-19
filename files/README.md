@@ -42,7 +42,7 @@ ANTHROPIC_API_KEY=你的 Anthropic API key
 
 ## 本地先看卡片长什么样
 
-不联网、不发飞书，只用样例论文打印卡片 JSON：
+不抓 arXiv、不发飞书，只用样例论文打印选择报告和卡片 JSON；如果已经配置模型 key，仍会调用模型生成一句话：
 
 ```powershell
 $env:USE_SAMPLE_PAPERS="1"
@@ -61,7 +61,7 @@ $env:DRY_RUN="1"
 python main.py
 ```
 
-这一步会访问 arXiv 和模型 API，只在终端打印卡片。
+这一步会访问 arXiv 和模型 API，只在终端打印选择报告和卡片。
 
 ## 发到飞书
 
@@ -85,7 +85,7 @@ FEISHU_WEBHOOK_SECRET
 OPENAI_API_KEY
 ```
 
-之后它会在每天北京时间 09:00 自动跑，也可以在 Actions 页面手动点 `Run workflow`。
+之后它会在每天北京时间 09:00 自动跑，也可以在 Actions 页面手动点 `Run workflow`。工作流会用 GitHub Actions cache 保存 `files/data/sent_papers.json`，记录已经成功推送过的 arXiv 论文，避免高分论文连续几天重复出现；这个历史文件默认不提交进仓库。
 
 ## 当前兴趣画像
 
@@ -102,13 +102,24 @@ artificial intelligence, AI, machine learning, ML, deep learning,
 foundation model, large language model, LLM, generative AI, multimodal,
 vision-language, AI agent, human-AI interaction, human-centered AI,
 extended reality, XR, virtual reality, VR, augmented reality, AR,
-mixed reality, MR, spatial computing, embodied interaction,
+mixed reality, spatial computing, embodied interaction,
 human-computer interaction, HCI, user study, interaction design,
 user experience, UX, usability, mixed-initiative, design tool,
 benchmark, dataset, evaluation
 ```
 
-你可以直接在 `.env` 里改 `KEYWORDS`、`TOP_N` 和 `MIN_RELEVANCE_SCORE`。`MIN_RELEVANCE_SCORE` 越高，推送越少但更贴近；越低，探索性更强。
+你可以直接在 `.env` 里改这些筛选参数：
+
+```text
+TOP_N=5
+MIN_RELEVANCE_SCORE=4
+REQUIRE_CORE_RELEVANCE=1
+MAX_PAPER_AGE_DAYS=14
+SENT_HISTORY_RETENTION_DAYS=365
+ALLOW_REPEAT_PAPERS=0
+```
+
+`MIN_RELEVANCE_SCORE` 越高，推送越少但更贴近；越低，探索性更强。`REQUIRE_CORE_RELEVANCE=1` 会要求论文至少命中 HCI / Human-AI / XR / 可访问性 / HRI / AI+设计协作等核心方向，避免只因为泛 AI、ML、dataset、evaluation 词多就入选。`MAX_PAPER_AGE_DAYS` 控制“新论文”的时间窗口。需要临时重看历史论文时，把 `ALLOW_REPEAT_PAPERS=1` 即可。
 
 ## 后面再长出来的功能
 

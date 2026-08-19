@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -258,19 +259,22 @@ def build_daily_card(
             }
         )
 
-        url = p.get("url", "").strip()
+        note_elements = []
         context = p.get("context_line", "").strip()
+        detail = p.get("detail_line", "").strip()
         if context:
+            note_elements.append({"tag": "lark_md", "content": context})
+        if detail:
+            note_elements.append({"tag": "lark_md", "content": detail})
+        if note_elements:
             elements.append(
                 {
                     "tag": "note",
-                    "elements": [
-                        {"tag": "lark_md", "content": context}
-                    ],
+                    "elements": note_elements,
                 }
             )
 
-        actions = _paper_url_action(url)
+        actions = _paper_url_actions(p)
         if actions:
             elements.append({"tag": "action", "actions": actions})
         if i < len(papers) - 1:
@@ -289,14 +293,36 @@ def build_daily_card(
     }
 
 
-def _paper_url_action(url: str) -> List[Dict[str, Any]]:
+def _paper_url_actions(paper: Dict[str, Any]) -> List[Dict[str, Any]]:
+    url = paper.get("url", "").strip()
     if not url:
         return []
-    return [
+    actions = [
         {
             "tag": "button",
-            "text": {"tag": "plain_text", "content": "看原文"},
+            "text": {"tag": "plain_text", "content": "摘要页"},
             "type": "primary",
             "url": url,
         }
     ]
+    pdf_url = _arxiv_pdf_url(paper)
+    if pdf_url:
+        actions.append(
+            {
+                "tag": "button",
+                "text": {"tag": "plain_text", "content": "PDF"},
+                "type": "default",
+                "url": pdf_url,
+            }
+        )
+    return actions
+
+
+def _arxiv_pdf_url(paper: Dict[str, Any]) -> str:
+    paper_id = str(paper.get("id", "")).strip()
+    url = str(paper.get("url", "")).strip()
+    if not paper_id and "arxiv.org/abs/" in url:
+        paper_id = url.rsplit("/", 1)[-1]
+    if not re.fullmatch(r"\d{4}\.\d{4,5}(?:v\d+)?", paper_id):
+        return ""
+    return f"https://arxiv.org/pdf/{paper_id}"
