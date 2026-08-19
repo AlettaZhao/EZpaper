@@ -815,9 +815,13 @@ def humanize_prompt_input(summary: str, paper: Dict[str, Any]) -> str:
 
 def normalize_humanized_summary(text: str) -> str:
     text = text.strip().strip("\"'“”")
+    if not text:
+        return ""
     slots = parse_summary_slots(text)
     if slots:
         text = slots.get("人话版", "") or slots.get("summary", "") or slots.get("一句话", "")
+    elif has_generation_artifact(text):
+        return ""
     text = text.strip().strip("\"'“”")
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"^(人话版|一句话|输出)[:：]\s*", "", text)
@@ -833,6 +837,8 @@ def normalize_humanized_summary(text: str) -> str:
 
 def is_humanized_summary_safe(candidate: str, precise: str, paper: Dict[str, Any], check_length: bool = True) -> bool:
     if not candidate:
+        return False
+    if has_generation_artifact(candidate):
         return False
     if not is_complete_sentence(candidate, precise):
         return False
@@ -984,6 +990,11 @@ def looks_truncated(text: str, precise: str = "") -> bool:
         "到",
         "让",
         "使",
+        "给",
+        "为",
+        "向",
+        "用",
+        "将",
         "但",
         "而",
         "并",
@@ -1082,18 +1093,36 @@ def normalize_summary(text: str, paper: Dict[str, Any]) -> str:
 def parse_summary_slots(text: str) -> Dict[str, str]:
     candidate = text.strip()
     if "```" in candidate:
-        candidate = re.sub(r"^```(?:json)?", "", candidate.strip())
-        candidate = re.sub(r"```$", "", candidate.strip())
-    match = re.search(r"\{.*\}", candidate, flags=re.S)
-    if match:
-        candidate = match.group(0)
-    try:
-        data = json.loads(candidate)
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    return {str(k): str(v).strip() for k, v in data.items() if v is not None}
+        candidate = re.sub(r"^```(?:json)?\s*", "", candidate.strip())
+        candidate = re.sub(r"\s*```$", "", candidate.strip())
+
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", candidate):
+        try:
+            data, _ = decoder.raw_decode(candidate[match.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return {str(k): str(v).strip() for k, v in data.items() if v is not None}
+    return {}
+
+
+def has_generation_artifact(text: str) -> bool:
+    return any(
+        marker in text
+        for marker in [
+            "{",
+            "}",
+            "```",
+            '"人话版"',
+            "做了什么",
+            "发现了什么",
+            "方法类型",
+            "具体场景",
+            "样本规模",
+            "依据句",
+        ]
+    )
 
 
 def render_summary_from_slots(slots: Dict[str, str], paper: Dict[str, Any]) -> str:
