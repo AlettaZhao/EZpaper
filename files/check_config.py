@@ -34,11 +34,10 @@ def main() -> None:
 
     if app_targets_ok and app_creds_missing:
         print("Feishu app channel is incomplete and will fail: " + ", ".join(app_creds_missing))
+        missing_required.extend(app_creds_missing)
 
     if not app_channel_ok and not webhooks_ok:
-        if app_targets_ok:
-            missing_required.extend(app_creds_missing)
-        else:
+        if not app_targets_ok:
             missing_required.append("FEISHU_OPEN_IDS or FEISHU_WEBHOOKS")
         print("Missing complete Feishu delivery channel: set FEISHU_OPEN_IDS with app credentials, or FEISHU_WEBHOOKS")
 

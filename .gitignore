@@ -3,3 +3,4 @@ files/.env
 __pycache__/
 *.pyc
 files/data/
+Sample/

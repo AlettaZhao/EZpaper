@@ -1,48 +1,75 @@
 # EZpaper · Aletta 的每日论文人话版
 
-目标：每天早上在飞书里给自己推 3-5 篇和 `HCI / AI / ML / XR` 相关的论文。每篇论文先给一句人话，比如：
+目标：每天早上在飞书里推 3-5 篇和 `HCI / Human-AI / AI Design / XR` 相关的新论文。每篇只保留一句真正能看懂的话，再附上简短场景标签、匹配理由、摘要页和 PDF 按钮。
 
-> 这篇论文是在比较不同 VR/AR 设备追手指准不准，尤其看点选和描线这类细操作。
+当前数据源是 arXiv。程序会先抓最新论文，再做同篇去重、已推送历史去重、核心相关性过滤，最后把入选论文交给模型生成一句话。
 
-现在先做单用户 MVP：arXiv 取数，关键词粗筛，模型生成一句话，飞书自建应用单聊或群机器人 webhook 推送。
+## 两个发送口
 
-## 你先做这三步
+EZpaper 支持两条 Feishu 发送通道，可以只开一个，也可以两个都开：
 
-1. 进入代码目录
+```text
+FEISHU_OPEN_IDS=ou_xxx,ou_yyy
+FEISHU_WEBHOOKS=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+```
+
+`FEISHU_OPEN_IDS` 是飞书自建应用单聊。它需要同时配置：
+
+```text
+FEISHU_APP_ID=cli_xxxxxxxx
+FEISHU_APP_SECRET=xxxxxxxx
+```
+
+`FEISHU_WEBHOOKS` 是飞书群机器人 webhook。它不需要 app token；如果群机器人开启了签名校验，再配置：
+
+```text
+FEISHU_WEBHOOK_SECRET=xxxxxxxx
+```
+
+如果两个发送口都配置了，同一张每日论文卡片会同时发到单聊和群里。程序会逐个发送，任何一个目标失败都会在日志里显示；只有所有目标都成功后，才会把论文写入“已推送历史”，避免失败时误标成已读。
+
+## 快速开始
+
+进入代码目录：
 
 ```powershell
 cd EZpaper\files
 ```
 
-2. 复制环境变量模板
+复制配置模板：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-3. 打开 `.env`，填这几个值
+至少填这些值：
 
 ```text
-FEISHU_APP_ID=你的飞书自建应用 App ID
-FEISHU_APP_SECRET=你的飞书自建应用 App Secret
+OPENAI_API_KEY=你的 OpenAI API key
+
+# 发送口二选一，或者两个都填
 FEISHU_OPEN_IDS=你的飞书 open_id，多个用英文逗号分隔
 FEISHU_WEBHOOKS=飞书群机器人 webhook，多个用英文逗号分隔
-FEISHU_WEBHOOK_SECRET=飞书群机器人签名密钥；未开启签名可留空
-OPENAI_API_KEY=你的 OpenAI API key
 ```
 
-`FEISHU_OPEN_IDS` 和 `FEISHU_WEBHOOKS` 可以并存：前者走自建应用单聊，需要 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`；后者走群机器人 webhook，不需要 token。如果群机器人开启了签名校验，再填 `FEISHU_WEBHOOK_SECRET`。
-
-如果先不用 OpenAI，也可以改成 Anthropic：
+如果使用 `FEISHU_OPEN_IDS`，还要填 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`。如果先不用 OpenAI，也可以换 Anthropic：
 
 ```text
 SUMMARY_PROVIDER=anthropic
 ANTHROPIC_API_KEY=你的 Anthropic API key
 ```
 
-## 本地先看卡片长什么样
+## 运行前检查
 
-不抓 arXiv、不发飞书，只用样例论文打印选择报告和卡片 JSON；如果已经配置模型 key，仍会调用模型生成一句话：
+```powershell
+python check_config.py
+```
+
+这个命令会检查是否至少有一个完整发送通道，以及是否配置了 OpenAI 或 Anthropic key。
+
+## 本地预览
+
+只看样例卡片，不抓 arXiv、不发飞书：
 
 ```powershell
 $env:USE_SAMPLE_PAPERS="1"
@@ -50,31 +77,43 @@ $env:DRY_RUN="1"
 python main.py
 ```
 
-如果你的 Windows 终端没有 `python`，用 Codex 内置 Python 或先安装 Python 3.11。
+注意：如果 `.env` 里已经配置了模型 key，样例模式仍会调用模型生成一句话；想完全不调模型，可以临时清掉当前终端里的 key。
 
-当前发送层使用 Python 标准库请求飞书接口；`requirements.txt` 里的依赖主要给调试脚本和后面的飞书回调服务用。
-
-## 真正抓 arXiv，但先不发飞书
+真正抓 arXiv，但先不发飞书：
 
 ```powershell
 $env:DRY_RUN="1"
 python main.py
 ```
 
-这一步会访问 arXiv 和模型 API，只在终端打印选择报告和卡片。
+dry run 会先打印选择报告，例如抓了多少篇、同篇去重多少篇、历史跳过多少篇、核心相关不足挡掉多少篇，然后打印即将发送的卡片 JSON。
 
-## 发到飞书
+## 正式发送
 
-确认卡片没问题后，清掉 `DRY_RUN` 再跑：
+确认 dry run 没问题后，清掉 `DRY_RUN`：
 
 ```powershell
 Remove-Item Env:\DRY_RUN
 python main.py
 ```
 
-## 上 GitHub 定时
+发送成功后，程序会把本次论文记录到：
 
-workflow 已经放在项目根目录的 `.github/workflows/daily.yml`。推到 GitHub 后，在仓库的 `Settings → Secrets and variables → Actions` 里加：
+```text
+files/data/sent_papers.json
+```
+
+这个文件默认不提交到 Git。它用于避免跨天重复推送同一篇 arXiv 论文；`2608.12345v1` 和 `2608.12345v2` 会被视为同一篇。
+
+## GitHub 定时
+
+workflow 在项目根目录：
+
+```text
+.github/workflows/daily.yml
+```
+
+默认每天北京时间 09:00 运行，也可以在 GitHub Actions 页面手动点 `Run workflow`。在仓库的 `Settings -> Secrets and variables -> Actions` 里加：
 
 ```text
 FEISHU_APP_ID
@@ -83,11 +122,14 @@ FEISHU_OPEN_IDS
 FEISHU_WEBHOOKS
 FEISHU_WEBHOOK_SECRET
 OPENAI_API_KEY
+ANTHROPIC_API_KEY
 ```
 
-之后它会在每天北京时间 09:00 自动跑，也可以在 Actions 页面手动点 `Run workflow`。工作流会用 GitHub Actions cache 保存 `files/data/sent_papers.json`，记录已经成功推送过的 arXiv 论文，避免高分论文连续几天重复出现；这个历史文件默认不提交进仓库。
+只用群机器人时，`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_OPEN_IDS` 可以不填。只用自建应用单聊时，`FEISHU_WEBHOOKS` / `FEISHU_WEBHOOK_SECRET` 可以不填。
 
-## 当前兴趣画像
+GitHub Actions 会用 cache 保存 `files/data/sent_papers.json`，所以自动任务可以跨天记住已推送论文，同时不会每天产生一个历史文件 commit。
+
+## 筛选逻辑
 
 默认 arXiv 分类：
 
@@ -95,20 +137,7 @@ OPENAI_API_KEY
 cs.HC, cs.AI, cs.LG, stat.ML, cs.CL, cs.CV, cs.GR, cs.RO
 ```
 
-默认关键词：
-
-```text
-artificial intelligence, AI, machine learning, ML, deep learning,
-foundation model, large language model, LLM, generative AI, multimodal,
-vision-language, AI agent, human-AI interaction, human-centered AI,
-extended reality, XR, virtual reality, VR, augmented reality, AR,
-mixed reality, spatial computing, embodied interaction,
-human-computer interaction, HCI, user study, interaction design,
-user experience, UX, usability, mixed-initiative, design tool,
-benchmark, dataset, evaluation
-```
-
-你可以直接在 `.env` 里改这些筛选参数：
+筛选参数：
 
 ```text
 TOP_N=5
@@ -119,11 +148,71 @@ SENT_HISTORY_RETENTION_DAYS=365
 ALLOW_REPEAT_PAPERS=0
 ```
 
-`MIN_RELEVANCE_SCORE` 越高，推送越少但更贴近；越低，探索性更强。`REQUIRE_CORE_RELEVANCE=1` 会要求论文至少命中 HCI / Human-AI / XR / 可访问性 / HRI / AI+设计协作等核心方向，避免只因为泛 AI、ML、dataset、evaluation 词多就入选。`MAX_PAPER_AGE_DAYS` 控制“新论文”的时间窗口。需要临时重看历史论文时，把 `ALLOW_REPEAT_PAPERS=1` 即可。
+`MIN_RELEVANCE_SCORE` 越高，推送越少但更贴近。`REQUIRE_CORE_RELEVANCE=1` 会要求论文至少命中 HCI、Human-AI、设计/共创、XR/空间交互、可访问性、HRI 等核心方向，避免只因为泛 AI、ML、dataset、evaluation 词多就入选。
 
-## 后面再长出来的功能
+`MAX_PAPER_AGE_DAYS` 控制新鲜度窗口。`ALLOW_REPEAT_PAPERS=1` 可以临时允许已推送论文再次出现，适合你想复查筛选效果的时候。
+
+## 输出体验
+
+飞书卡片每篇论文包含：
+
+- 一句话版：最核心的人话总结。
+- 场景标签：例如 `用户研究 · XR`。
+- 推荐理由：例如 `核心匹配：HCI/用户研究 / XR/空间交互`。
+- 两个按钮：`摘要页` 和 `PDF`。
+
+这套呈现的原则是：主信息只放一句话，决策辅助信息放小字，打开论文的动作放按钮。
+
+## 测试
+
+```powershell
+python -m py_compile main.py feishu.py check_config.py
+python -m unittest discover -s . -p "test_*.py"
+```
+
+测试覆盖了：
+
+- 同一篇 arXiv 论文的 `v1/v2` 去重。
+- 已推送历史跳过。
+- 泛 ML 论文不会只靠关键词入选。
+- 医学 `MR` 和 autoregressive `AR` 不会被误判成 XR。
+- Feishu app 单聊和群 webhook 可以同时发送。
+- 飞书卡片包含摘要页和 PDF 按钮。
+
+## 常见问题
+
+没有命中新论文：
+
+```text
+今天没有命中的新论文
+```
+
+通常说明最近候选都已经推过，或者筛选太严格。可以临时设置 `ALLOW_REPEAT_PAPERS=1` 看看原始候选，也可以降低 `MIN_RELEVANCE_SCORE`。
+
+想只发群里：
+
+```text
+FEISHU_WEBHOOKS=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+```
+
+想只发单聊：
+
+```text
+FEISHU_OPEN_IDS=ou_xxx
+FEISHU_APP_ID=cli_xxx
+FEISHU_APP_SECRET=xxx
+```
+
+想完全预览、不发消息：
+
+```powershell
+$env:DRY_RUN="1"
+python main.py
+```
+
+## 后续方向
 
 - 用 OpenAlex / Semantic Scholar 补 CHI、UIST、ISMAR、CSCW、VRST 等来源。
-- 把 `rank()` 从关键词计数换成 embedding 相似度。
+- 把排序从关键词计分升级成 embedding 相似度。
 - 用 Zotero 库和你的点击反馈更新兴趣画像。
-- 后续如果要采集点击反馈，再加飞书卡片回调服务；目前按钮只跳转原文链接。
+- 给飞书卡片加“喜欢 / 不相关 / 稍后读”反馈按钮。

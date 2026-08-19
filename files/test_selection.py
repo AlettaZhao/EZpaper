@@ -103,6 +103,38 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(filtered, [])
         self.assertEqual(stats.get("weak_relevance"), 1)
 
+    def test_autoregressive_ar_does_not_count_as_augmented_reality(self):
+        papers = [
+            paper(
+                "2608.20004v1",
+                "Efficient AR Sequence Modeling with Large Language Models",
+                "We improve autoregressive sequence modeling with a machine learning benchmark.",
+                categories=["cs.LG"],
+            )
+        ]
+        stats = {}
+
+        filtered = main.coarse_filter(papers, stats)
+
+        self.assertEqual(filtered, [])
+        self.assertEqual(stats.get("weak_relevance"), 1)
+
+    def test_generic_llm_human_evaluation_does_not_count_as_ai_design(self):
+        papers = [
+            paper(
+                "2608.20005v1",
+                "Uncertainty-Guarded LLM Judging",
+                "We benchmark large language model judging against human evaluation with risk guarantees.",
+                categories=["cs.CL"],
+            )
+        ]
+        stats = {}
+
+        filtered = main.coarse_filter(papers, stats)
+
+        self.assertEqual(filtered, [])
+        self.assertEqual(stats.get("weak_relevance"), 1)
+
     def test_coarse_filter_accepts_xr_context(self):
         papers = [
             paper(
