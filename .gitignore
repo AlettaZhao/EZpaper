@@ -1,5 +1,9 @@
 .env
 files/.env
+.env.*
+!.env.example
+files/.env.*
+!files/.env.example
 __pycache__/
 *.pyc
 files/data/

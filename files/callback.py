@@ -60,7 +60,7 @@ async def callback(request: Request) -> Dict[str, Any]:
 
 def handle_action(open_id: str, action: str, paper_id: str) -> None:
     """先把信号写到本地 jsonl，之后再换成数据库或 Zotero API。"""
-    print(f"[signal] user={open_id} action={action} paper={paper_id}")
+    print(f"[signal] user={mask_identifier(open_id)} action={action} paper={paper_id}")
     log_feedback(open_id, action, paper_id)
 
     if action == "detail":
@@ -74,6 +74,14 @@ def handle_action(open_id: str, action: str, paper_id: str) -> None:
     elif action == "skip":
         # TODO: 负样本，回去更新画像
         pass
+
+
+def mask_identifier(value: str) -> str:
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:3]}***{value[-3:]}"
 
 
 def log_feedback(open_id: str, action: str, paper_id: str) -> None:

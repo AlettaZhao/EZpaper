@@ -6,7 +6,7 @@
 2. 用手机号查 open_id
 3. 给该 open_id 发送交互式卡片消息
 
-注意：脚本会按你的要求打印每一步的完整返回值，tenant_access_token 会出现在终端输出里。
+日志会自动遮盖 access token、手机号、open_id 和 message_id 等敏感字段。
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def main() -> None:
 
     user_data = get_open_id_by_mobile(tenant_access_token, mobile, args.include_resigned)
     open_id = extract_open_id(user_data, mobile)
-    print(f"\n解析到 open_id: {open_id}")
+    print(f"\n解析到 open_id: {mask_sensitive_value(open_id)}")
 
     message_data = send_interactive_card(
         tenant_access_token=tenant_access_token,
@@ -51,7 +51,8 @@ def main() -> None:
         title=args.card_title,
         text=args.card_text,
     )
-    print(f"\n发送完成，message_id: {message_data.get('data', {}).get('message_id')}")
+    message_id = message_data.get("data", {}).get("message_id", "")
+    print(f"\n发送完成，message_id: {mask_sensitive_value(message_id)}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -209,10 +210,48 @@ def print_response(step: str, response: requests.Response, body: Any) -> None:
     if log_id:
         print(f"X-Tt-Logid: {log_id}")
     print("Response:")
+    safe_body = redact_sensitive_fields(body)
     if isinstance(body, (dict, list)):
-        print(json.dumps(body, ensure_ascii=False, indent=2))
+        print(json.dumps(safe_body, ensure_ascii=False, indent=2))
     else:
-        print(body)
+        print(safe_body)
+
+
+SENSITIVE_FIELD_NAMES = {
+    "access_token",
+    "app_access_token",
+    "app_secret",
+    "authorization",
+    "message_id",
+    "mobile",
+    "mobiles",
+    "open_id",
+    "refresh_token",
+    "tenant_access_token",
+    "user_id",
+}
+
+
+def redact_sensitive_fields(value: Any, field_name: str = "") -> Any:
+    """Return a log-safe copy of a Feishu response without mutating it."""
+    if field_name.lower() in SENSITIVE_FIELD_NAMES:
+        if isinstance(value, list):
+            return [mask_sensitive_value(item) for item in value]
+        return mask_sensitive_value(value)
+    if isinstance(value, dict):
+        return {key: redact_sensitive_fields(item, key) for key, item in value.items()}
+    if isinstance(value, list):
+        return [redact_sensitive_fields(item, field_name) for item in value]
+    return value
+
+
+def mask_sensitive_value(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if len(text) <= 8:
+        return "***"
+    return f"{text[:3]}***{text[-3:]}"
 
 
 def extract_open_id(user_data: Dict[str, Any], mobile: str) -> str:
@@ -225,7 +264,8 @@ def extract_open_id(user_data: Dict[str, Any], mobile: str) -> str:
     matched_user = next((item for item in user_list if item.get("mobile") == mobile), user_list[0])
     open_id = matched_user.get("user_id")
     if not open_id:
-        raise SystemExit(f"返回里没有 user_id/open_id 字段：{matched_user}")
+        safe_user = redact_sensitive_fields(matched_user)
+        raise SystemExit(f"返回里没有 user_id/open_id 字段：{safe_user}")
     return open_id
 
 
