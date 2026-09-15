@@ -20,7 +20,7 @@ from net import get_text, post_json
 
 load_env_file()
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+ARXIV_API = "https://export.arxiv.org/api/query"
 DEFAULT_ARXIV_CATEGORIES = [
     "cs.HC",
     "cs.AI",
@@ -90,6 +90,9 @@ TOP_N = int(os.environ.get("TOP_N", "5"))
 MAX_RESULTS_PER_CATEGORY = int(os.environ.get("MAX_RESULTS_PER_CATEGORY", "50"))
 MIN_RELEVANCE_SCORE = int(os.environ.get("MIN_RELEVANCE_SCORE", "3"))
 ARXIV_REQUEST_DELAY_SECONDS = float(os.environ.get("ARXIV_REQUEST_DELAY_SECONDS", "3.2"))
+ARXIV_REQUEST_TIMEOUT_SECONDS = int(os.environ.get("ARXIV_REQUEST_TIMEOUT_SECONDS", "45"))
+ARXIV_RETRY_ATTEMPTS = max(1, int(os.environ.get("ARXIV_RETRY_ATTEMPTS", "3")))
+ARXIV_RETRY_BACKOFF_SECONDS = float(os.environ.get("ARXIV_RETRY_BACKOFF_SECONDS", "5"))
 SUMMARY_DISPLAY_MAX_CHARS = int(os.environ.get("SUMMARY_DISPLAY_MAX_CHARS", "48"))
 PRECISE_RETRY_ATTEMPTS = int(os.environ.get("PRECISE_RETRY_ATTEMPTS", "2"))
 HUMANIZE_RETRY_ATTEMPTS = int(os.environ.get("HUMANIZE_RETRY_ATTEMPTS", "2"))
@@ -354,16 +357,32 @@ def fetch_recent(category: str, max_results: int = 100) -> List[Dict[str, Any]]:
     """
     import xml.etree.ElementTree as ET
 
-    body = get_text(
-        ARXIV_API,
-        {
-            "search_query": f"cat:{category}",
-            "sortBy": "submittedDate",
-            "sortOrder": "descending",
-            "max_results": max_results,
-        },
-        timeout=30,
-    )
+    body = ""
+    for attempt in range(1, ARXIV_RETRY_ATTEMPTS + 1):
+        try:
+            body = get_text(
+                ARXIV_API,
+                {
+                    "search_query": f"cat:{category}",
+                    "sortBy": "submittedDate",
+                    "sortOrder": "descending",
+                    "max_results": max_results,
+                },
+                timeout=ARXIV_REQUEST_TIMEOUT_SECONDS,
+            )
+            break
+        except Exception as exc:
+            if attempt >= ARXIV_RETRY_ATTEMPTS:
+                raise RuntimeError(
+                    f"arXiv 分类 {category} 抓取失败，已重试 {ARXIV_RETRY_ATTEMPTS} 次"
+                ) from exc
+            delay = ARXIV_RETRY_BACKOFF_SECONDS * attempt
+            print(
+                f"[warn] arXiv 分类 {category} 第 {attempt} 次请求失败：{exc}；"
+                f"{delay:g} 秒后重试"
+            )
+            if delay > 0:
+                time.sleep(delay)
 
     ns = {
         "a": "http://www.w3.org/2005/Atom",
@@ -1826,10 +1845,28 @@ def main() -> None:
     if os.environ.get("USE_SAMPLE_PAPERS"):
         all_papers.extend(SAMPLE_PAPERS)
     else:
+        successful_categories = 0
+        failed_categories: List[str] = []
         for idx, cat in enumerate(CATEGORIES):
             if idx > 0 and ARXIV_REQUEST_DELAY_SECONDS > 0:
                 time.sleep(ARXIV_REQUEST_DELAY_SECONDS)
-            all_papers.extend(fetch_recent(cat.strip(), max_results=MAX_RESULTS_PER_CATEGORY))
+            category = cat.strip()
+            try:
+                all_papers.extend(fetch_recent(category, max_results=MAX_RESULTS_PER_CATEGORY))
+                successful_categories += 1
+            except Exception as exc:
+                failed_categories.append(category)
+                print(f"[warn] 跳过抓取失败的 arXiv 分类 {category}：{exc}")
+
+        if successful_categories == 0:
+            raise RuntimeError(
+                "所有 arXiv 分类都抓取失败：" + ", ".join(failed_categories)
+            )
+        if failed_categories:
+            print(
+                f"[warn] {len(failed_categories)}/{len(CATEGORIES)} 个 arXiv 分类抓取失败，"
+                "将使用其余分类继续生成日报"
+            )
 
     history = load_sent_history()
     pruned = prune_sent_history(history)
