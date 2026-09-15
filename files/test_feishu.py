@@ -69,6 +69,20 @@ class FeishuDeliveryTests(unittest.TestCase):
         self.assertFalse(results[1]["ok"])
         self.assertEqual(results[1]["channel"], "webhook")
 
+    def test_app_target_is_masked_in_logs(self):
+        open_id = "ou_sensitive_identifier_1234"
+        output = StringIO()
+        with patch.object(feishu, "send_via_app", return_value={"code": 0, "msg": "ok"}):
+            with redirect_stdout(output):
+                feishu.send_card_to_open_ids(
+                    {"elements": []},
+                    open_ids=[open_id],
+                    webhooks=[],
+                )
+
+        self.assertNotIn(open_id, output.getvalue())
+        self.assertIn("ou_s…1234", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -145,7 +145,7 @@ def send_card_to_open_ids(
             msg = str(exc)
             ok = False
 
-        print(f"飞书发送 app open_id={open_id} code={code} msg={msg}")
+        print(f"飞书发送 app open_id={mask_identifier(open_id)} code={code} msg={msg}")
         results.append(
             {
                 "channel": "app",
@@ -214,6 +214,14 @@ def parse_env_list(raw: str) -> List[str]:
         for item in raw.replace("\n", ",").split(",")
         if item.strip()
     ]
+
+
+def mask_identifier(value: str) -> str:
+    """保留少量首尾字符用于排错，避免在 Actions 日志中暴露完整用户标识。"""
+    value = value.strip()
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:4]}…{value[-4:]}"
 
 
 def _feishu_result_status(data: Dict[str, Any]) -> tuple:
