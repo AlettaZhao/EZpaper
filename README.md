@@ -1,6 +1,10 @@
-# EZpaper
+<p align="center">
+  <img src="logo.png" alt="EZpaper logo" width="128">
+</p>
 
-> 每天自动从 arXiv 挑出与你研究方向最相关的论文，用一句中文讲清楚“它到底做了什么”，再把精选结果推送到飞书。
+<h1 align="center">EZpaper</h1>
+
+<p align="center">每天自动从 arXiv 挑出与你研究方向最相关的论文，用一句中文讲清楚“它到底做了什么”，再把精选结果推送到飞书。</p>
 
 EZpaper 面向不想每天手动刷 arXiv 的研究者。它会完成 **抓取 → 去重 → 相关性筛选 → LLM 一句话总结 → 飞书卡片推送**，默认每天只留下 3–5 篇真正值得打开的论文。
 
@@ -33,7 +37,15 @@ EZpaper 面向不想每天手动刷 arXiv 的研究者。它会完成 **抓取 �
 
 ## 个人部署：四步开始
 
-个人部署是推荐方式：论文方向、关键词、模型账号和飞书接收位置都由你自己控制。只想直接看维护者的共享推送、不想配置 GitHub Actions，也可以跳到文末的[加群交流](#加群交流)。
+个人部署是推荐方式：论文方向、关键词、模型账号和飞书接收位置都由你自己控制，全程不需要服务器或常开电脑。
+
+开始前只需要准备：
+
+- 一个 GitHub 账号；
+- 一个用于接收推送的飞书群；
+- 一个 OpenAI 或 Anthropic API key。
+
+只想直接看维护者的共享推送、不想配置 GitHub Actions，也可以跳到文末的[直接加群](#不想部署直接加群)。
 
 ### 1. Fork 仓库
 
@@ -65,7 +77,7 @@ EZpaper 面向不想每天手动刷 arXiv 的研究者。它会完成 **抓取 �
 #### 获取模型 API key
 
 - **OpenAI（默认）**：登录 [OpenAI API key 页面](https://platform.openai.com/api-keys)，创建 secret key，并将它保存为 GitHub secret `OPENAI_API_KEY`。API 账户需要可用额度；首次使用可参考 [OpenAI 官方 Quickstart](https://developers.openai.com/api/docs/quickstart)。
-- **Anthropic（可选）**：登录 [Claude Console API Keys](https://platform.claude.com/settings/keys) 创建 key，并将它保存为 GitHub secret `ANTHROPIC_API_KEY`；官方说明见 [Claude API overview](https://platform.claude.com/docs/en/api/overview#getting-api-keys)。只配置这一种 key 时，程序会自动选择 Anthropic。
+- **Anthropic（可选）**：登录 [Claude Console API Keys](https://platform.claude.com/settings/keys) 创建 key，并将它保存为 GitHub secret `ANTHROPIC_API_KEY`；官方说明见 [Claude API overview](https://platform.claude.com/docs/en/api/overview#getting-api-keys)。在 GitHub Actions 中只配置这一种 key 时，程序会自动选择 Anthropic；本地使用 `.env.example` 时，还需把 `SUMMARY_PROVIDER` 改成 `anthropic`。
 
 如果同时配置了两种模型密钥，在 workflow 中运行 `python main.py` 的 `env` 区块添加 `SUMMARY_PROVIDER: openai` 或 `SUMMARY_PROVIDER: anthropic` 来明确指定。
 
@@ -161,6 +173,7 @@ GitHub 官方说明见 [Workflows in forked repositories](https://docs.github.co
 | `SUMMARY_PROVIDER` | 自动选择 | `openai` 或 `anthropic`；未设置时按可用密钥选择 |
 | `OPENAI_MODEL` | `gpt-5.5` | OpenAI 摘要模型 |
 | `OPENAI_REASONING_EFFORT` | `low` | 推理强度 |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Anthropic 摘要模型 |
 
 项目通过 OpenAI Responses API 调用 `gpt-5.5`；该模型支持 `low` reasoning effort，详见 [OpenAI 官方模型文档](https://developers.openai.com/api/docs/models/gpt-5.5)。如果账号无权使用该模型，可把 workflow 中的 `OPENAI_MODEL` 换成账号可用的文本模型。
 
@@ -174,12 +187,11 @@ GitHub 官方说明见 [Workflows in forked repositories](https://docs.github.co
 
 ## 本地运行
 
-需要 Python 3.11+。
+需要 Python 3.11+。每日推送主流程只使用 Python 标准库，不需要先安装第三方包。
 
 ```bash
 git clone https://github.com/AlettaZhao/EZpaper.git
 cd EZpaper/files
-python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
@@ -187,6 +199,12 @@ Windows PowerShell 可将最后一行换成：
 
 ```powershell
 Copy-Item .env.example .env
+```
+
+只有使用飞书自建应用探测工具或实验性回调服务时，才需要安装可选依赖：
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
 填写 `.env` 后先检查配置：
@@ -214,6 +232,14 @@ python main.py
 
 发送成功的 arXiv ID 会记录在 `files/data/sent_papers.json`。本地运行时该目录被 Git 忽略；GitHub Actions 使用 cache 跨天保存记录，不会每天向仓库提交数据。
 
+## 常见问题
+
+- **`check_config.py` 失败**：检查 Secret 名称是否完全一致；至少需要一个完整飞书渠道，以及一个模型 API key。
+- **运行成功但没有论文**：近期论文可能已经推送过，或筛选条件过严。可临时把 `ALLOW_REPEAT_PAPERS` 设为 `1` 验证，再恢复为 `0`。
+- **arXiv 超时**：程序会自动重试；单个分类失败时会继续处理其他分类，只有所有分类都失败才会让任务报错。
+- **定时推送比设定时间晚**：GitHub Actions 的定时任务可能排队，偶尔延迟属于正常情况。
+- **两个月后突然停止定时运行**：公开仓库连续 60 天没有仓库活动时，GitHub 可能自动停用 scheduled workflow；进入 **Actions** 页面重新启用即可。详见 [GitHub 官方说明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
+
 ## 安全说明
 
 - `.env`、运行数据、Python 缓存和本地样例目录均不会进入 Git；
@@ -226,24 +252,30 @@ python main.py
 
 ```text
 .github/workflows/daily.yml  定时任务和默认研究配置
+.github/workflows/tests.yml  Push / Pull Request 自动测试
 files/main.py                抓取、筛选、总结主流程
 files/feishu.py              飞书群机器人和私聊发送
+files/net.py                 HTTP 请求封装
+files/env.py                 本地 .env 读取
 files/check_config.py        配置完整性检查
 files/.env.example           本地配置模板
+files/feishu_app_probe.py    自建应用凭证与 open_id 调试工具
+files/callback.py            实验性卡片回调服务（非每日推送必需）
 files/test_*.py              自动化测试
+docs/images/                 README 展示图片
 ```
 
-## 加群交流
+## 不想部署？直接加群
 
-这里是个人部署之外的便捷入口：不想配置 GitHub Actions 的人，可以扫码加入 EZpaper 外部群，直接查看维护者的共享论文推送；希望使用自己的研究方向和关键词，仍建议按上面的四步自行部署。
+如果你关注 AI × HCI × XR，又不想自己配置 GitHub Actions，可以扫码加入 EZpaper 飞书外部群，直接接收维护者的每日论文推送。需要换成自己的研究方向和关键词时，再按上面的四步部署个人版本。
 
 <p align="center">
-  <img src="docs/images/community-qr.jpg" alt="EZpaper 飞书外部群二维码" width="420">
+  <img src="docs/images/community-qr-clean.png" alt="EZpaper 飞书外部群二维码" width="420">
 </p>
 
-二维码有效期至 **2027-09-15**。这是公开群入口：发布仓库后，任何看到 README 的人都可能申请或扫码加入，请按需要开启入群验证和群管理设置。
+<p align="center">二维码有效期至 <strong>2027-09-15</strong></p>
 
-## 测试
+## 开发与测试
 
 ```bash
 python -m py_compile files/main.py files/feishu.py files/check_config.py
@@ -251,6 +283,8 @@ python -m unittest discover -s files -p "test_*.py"
 ```
 
 当前测试覆盖论文去重、历史过滤、核心相关性、缩写误判、双渠道发送，以及 arXiv 超时重试和分类级容错。
+
+仓库的 `tests` workflow 会在 push 和 Pull Request 时自动运行上述检查，不需要任何 API key 或飞书 Secret。
 
 ## License
 
